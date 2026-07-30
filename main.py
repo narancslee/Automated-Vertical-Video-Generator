@@ -21,20 +21,18 @@ async def generate_audio_chunk(text, filename):
     await communicate.save(filename)
 
 async def build_video():
-    print("1. Szöveg beolvasása és mondatok okos csoportosítása...")
+    print("1. Szöveg beolvasása.")
     lines = load_lines()
     
-    # 1. LÉPÉS: Rövid sorok mondatokká fűzése az írásjelek alapján
     sentences = []
     current_sentence_lines = []
     for line in lines:
         current_sentence_lines.append(line)
-        # Ha a sor végén mondatvégi írásjel van, lezárjuk a blokkot
         if line.endswith('.') or line.endswith('!') or line.endswith('?'):
             sentences.append(current_sentence_lines)
             current_sentence_lines = []
             
-    if current_sentence_lines: # Maradék hozzáadása, ha az utolsó sor nem írásjellel végződött
+    if current_sentence_lines:
         sentences.append(current_sentence_lines)
 
     os.makedirs(TEMP_DIR, exist_ok=True)
@@ -42,19 +40,16 @@ async def build_video():
     subtitle_clips = []
     current_time = 0
     
-    print("2. Természetes hang generálása és mikroszinkronizálás mondatonként...")
+    print("2.Hang generálása és mikroszinkronizálás")
     base_video = VideoFileClip(VIDEO_INPUT)
     
     for i, sentence_lines in enumerate(sentences):
-        # A narrátornak egyben adjuk át a mondatot, hogy tökéletes legyen a hangsúly
         full_sentence_text = " ".join(sentence_lines)
         temp_filename = os.path.join(TEMP_DIR, f"sent_{i}.mp3")
         
         await generate_audio_chunk(full_sentence_text, temp_filename)
         sent_audio = AudioFileClip(temp_filename)
         audio_clips.append(sent_audio)
-        
-        # 2. LÉPÉS: Szinkronizálás KIZÁRÓLAG ezen a mondaton belül (így lehetetlen, hogy elcsússzon!)
         total_chars = sum(len(l) for l in sentence_lines)
         
         for line in sentence_lines:
@@ -79,10 +74,9 @@ async def build_video():
             subtitle_clips.append(txt_clip)
             current_time += line_duration
 
-    print("3. Végső audió és videó összefűzése...")
+    print("3. Összefűzés")
     final_audio = concatenate_audioclips(audio_clips)
     
-    # Háttérvideó hurokba rakása
     loops_needed = int(final_audio.duration // base_video.duration) + 1
     long_video = concatenate_videoclips([base_video] * loops_needed)
     video_clip = long_video.subclipped(0, final_audio.duration)
@@ -90,10 +84,10 @@ async def build_video():
     final_video = CompositeVideoClip([video_clip] + subtitle_clips)
     final_video = final_video.with_audio(final_audio)
     
-    print("Renderelés folyamatban...")
+    print("Renderelés")
     final_video.write_videofile(FINAL_OUTPUT, fps=30, codec="libx264", audio_codec="aac")
     
-    print("Takarítás...")
+    print("Tisztítás")
     for i in range(len(sentences)):
         try:
             os.remove(os.path.join(TEMP_DIR, f"sent_{i}.mp3"))
@@ -106,5 +100,5 @@ async def build_video():
 
 if __name__ == "__main__":
     asyncio.run(build_video())
-    print("Kész! A hibrid szinkron garantáltan tűpontos és természetes!")
+    print("Kész!")
     
